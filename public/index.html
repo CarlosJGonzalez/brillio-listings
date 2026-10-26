@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Listing Search (Express)</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 20px; }
+    label { display: inline-block; margin: 0 8px 10px 0; white-space: nowrap; }
+    input { border: 1px solid #767676; padding: 3px 5px; border-radius: 2px; }
+    button { border: 1px solid #767676; padding: 3px 10px; border-radius: 2px; cursor: pointer; }
+    button:disabled { cursor: not-allowed; opacity: .5; }
+    table { border-collapse: collapse; margin-top: 12px; }
+    th, td { padding: 8px 14px; border-bottom: 1px solid #ddd; text-align: left; }
+    th { background: #f3f3f3; }
+    tr:hover td { background: #fafafa; }
+    .error { color: #b00020; }
+  </style>
+</head>
+<body>
+  <!-- Login form: shown until the user signs in -->
+  <!-- <div id="login-box">
+    <h2>Login</h2>
+    <form id="login-form">
+      <label>Username <input id="username" type="text" style="border:1px solid #767676;padding:3px 5px;border-radius:2px"></label>
+      <label>Password <input id="password" type="password" style="border:1px solid #767676;padding:3px 5px;border-radius:2px"></label>
+      <button type="submit" style="cursor:pointer;border:1px solid #767676;padding:3px 8px">Log in</button>
+    </form>
+    <p id="login-error" style="color:#b00020"></p>
+  </div> -->
+
+  <!-- Shown after login -->
+  <!-- <div id="user-box" style="display:none">
+    Logged in as <strong id="user-name"></strong>
+    <button id="logout-btn" style="cursor:pointer;border:1px solid #767676;padding:3px 8px">Log out</button>
+  </div> -->
+
+
+
+
+  <!--  -->
+  <div id="search-area">
+    <h1>Listing Search</h1>
+    <form id="form">
+      <label>Min price <input name="minPrice" type="number" /></label>
+      <label>Max price <input name="maxPrice" type="number" /></label>
+      <label>Min bedrooms <input name="minBedrooms" type="number" /></label>
+      <label>City <input name="city" /></label>
+      <label>Keyword <input name="keyword" /></label>
+      <label>Target budget <input name="targetBudget" type="number" /></label>
+      <div>
+        <button type="submit">Search</button>
+        <button type="button" id="clear">Clear</button>
+      </div>
+    </form>
+
+    <div id="status"></div>
+    <div id="results"></div>
+    <div id="pager" hidden>
+      <button id="prev">Prev</button>
+      <span id="pageInfo"></span>
+      <button id="next">Next</button>
+    </div>
+  </div>
+
+<script>
+  const form = document.getElementById("form");
+  const statusEl = document.getElementById("status");
+  const resultsEl = document.getElementById("results");
+  const pager = document.getElementById("pager");
+  let page = 1, query = {};
+
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+  async function load() {
+    statusEl.textContent = "Loading…";
+    statusEl.className = "";
+    const params = new URLSearchParams({ ...query, page });
+    try {
+      const r = await fetch("/api/listings?" + params);
+      const type = r.headers.get("content-type") || "";
+      if (!type.includes("application/json")) {
+        throw new Error(`Server is offline or unreachable (HTTP ${r.status}).`);
+      }
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+      render(data);
+    } catch (e) {
+      resultsEl.innerHTML = "";
+      pager.hidden = true;
+      statusEl.className = "error";
+      statusEl.textContent = "Error: " + (e instanceof TypeError ? "Could not connect to server." : e.message);
+    }
+  }
+
+  function render(data) {
+    statusEl.textContent = `${data.total} result(s)`;
+    if (data.total === 0) {
+      statusEl.textContent = "No results.";
+      resultsEl.innerHTML = "";
+      pager.hidden = true;
+      return;
+    }
+    resultsEl.innerHTML = `<table>
+      <thead><tr><th>Address</th><th>City</th><th>Price</th><th>Bedrooms</th><th>Listed</th><th>Score</th></tr></thead>
+      <tbody>${data.results.map((l) => `<tr>
+        <td>${esc(l.address)}</td><td>${esc(l.city)}</td>
+        <td>$${Number(l.price).toLocaleString()}</td><td>${l.bedrooms}</td>
+        <td>${esc(String(l.listedDate).slice(0, 10))}</td><td>${l.score.toFixed(3)}</td></tr>`).join("")}
+      </tbody></table>`;
+    pager.hidden = false;
+    document.getElementById("pageInfo").textContent = ` Page ${data.page} of ${data.totalPages} `;
+    document.getElementById("prev").disabled = data.page <= 1;
+    document.getElementById("next").disabled = data.page >= data.totalPages;
+  }
+
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    query = Object.fromEntries([...new FormData(form)].filter(([, v]) => v !== ""));
+    page = 1;
+    load();
+  });
+  document.getElementById("clear").onclick = () => { form.reset(); query = {}; page = 1; load(); };
+  document.getElementById("prev").onclick = () => { page--; load(); };
+  document.getElementById("next").onclick = () => { page++; load(); };
+
+  load();
+</script>
+
+
+<script>
+  // const loginBox = document.getElementById("login-box");
+  // const userBox = document.getElementById("user-box");
+  // const loginError = document.getElementById("login-error");
+
+  // // Show the right box depending on whether we are logged in
+  // function showUser(user) {
+  //   loginBox.style.display = user ? "none" : "block";
+  //   userBox.style.display = user ? "block" : "none";
+  //   if (user) document.getElementById("user-name").textContent = user.name;
+  //   document.getElementById("search-area").style.display = user ? "block" : "none";
+  // }
+
+  // // Log in: send the username and password, keep the token in the browser
+  // document.getElementById("login-form").addEventListener("submit", async (e) => {
+  //   e.preventDefault();
+  //   loginError.textContent = "";
+  //   try {
+  //     const res = await fetch("/api/login", {
+  //       method: "POST",
+  //       headers: { "Content-Type": "application/json" },
+  //       body: JSON.stringify({
+  //         username: document.getElementById("username").value,
+  //         password: document.getElementById("password").value,
+  //       }),
+  //     });
+  //     const data = await res.json();
+  //     if (!res.ok) throw new Error(data.error || "Login failed");
+  //     localStorage.setItem("token", data.token);
+  //     showUser(data.user);
+  //   } catch (err) {
+  //     loginError.textContent = err.message.includes("JSON")
+  //       ? "Server is offline or unreachable."
+  //       : err.message;
+  //   }
+  // });
+
+  // // Log out: tell the server, then forget the token
+  // document.getElementById("logout-btn").addEventListener("click", async () => {
+  //   const token = localStorage.getItem("token");
+  //   await fetch("/api/logout", { method: "POST", headers: { Authorization: "Bearer " + token } }).catch(() => {});
+  //   localStorage.removeItem("token");
+  //   showUser(null);
+  // });
+
+  // // On page load: check whether the saved token is still valid
+  // (async () => {
+  //   const token = localStorage.getItem("token");
+  //   if (!token) return showUser(null);
+  //   try {
+  //     const res = await fetch("/api/me", { headers: { Authorization: "Bearer " + token } });
+  //     if (!res.ok) throw new Error();
+  //     showUser((await res.json()).user);
+  //   } catch {
+  //     localStorage.removeItem("token");
+  //     showUser(null);
+  //   }
+  // })();
+</script>
+
+</body>
+</html>
